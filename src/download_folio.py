@@ -43,7 +43,7 @@ def download_folio_dataset(save_path=None, split='train'):
         dataset = load_dataset(
             'yale-nlp/FOLIO',
             split=split,
-            use_auth_token=HF_TOKEN
+            token=HF_TOKEN
         )
         print(f"Dataset descargado exitosamente. Número de registros: {len(dataset)}")
         

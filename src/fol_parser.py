@@ -34,10 +34,13 @@ FOL_GRAMMAR = """
            | atom
 
 ?atom: predicate
+     | equality
      | "(" formula ")"
 
 predicate: NAME "(" term_list? ")" -> predicate
          | NAME -> constant_or_var
+
+equality: term "=" term -> equals
 
 term_list: term ("," term)* -> term_list
 
@@ -100,7 +103,7 @@ class FOLTransformer(Transformer):
         from lark import Tree
         if isinstance(arg, Tree):
             # Operadores lógicos importantes que NO deben ser desenrollados
-            logical_operators = ('or', 'and', 'xor', 'implies', 'bicond', 'not', 'forall', 'exists')
+            logical_operators = ('or', 'and', 'xor', 'implies', 'bicond', 'not', 'forall', 'exists', 'equals')
             
             # Si es un operador lógico, transformarlo correctamente
             if arg.data in logical_operators:
@@ -275,6 +278,13 @@ class FOLTransformer(Transformer):
     def variable(self, args):
         var_name = args[0].value if isinstance(args[0], FOLASTNode) else str(args[0])
         return FOLASTNode("VARIABLE", value=var_name)
+    
+    def equals(self, args):
+        """Maneja igualdad entre términos: t1 = t2 (fórmula atómica de identidad)"""
+        # args debería ser [term1, term2]
+        left = self._ensure_fol_node(args[0])
+        right = self._ensure_fol_node(args[1])
+        return FOLASTNode("EQUALS", children=[left, right])
     
     def NAME(self, token):
         # Preserva el nombre exacto del token

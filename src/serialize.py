@@ -49,7 +49,8 @@ def ast_to_json(ast: FOLASTNode, metrics: Optional[Dict[str, Any]] = None,
 
 
 def ast_to_svg(ast: FOLASTNode, filename: str = 'ast', 
-               directory: str = 'outputs', format: str = 'svg') -> Optional[str]:
+               directory: str = 'outputs', format: str = 'svg', 
+               also_png: bool = False) -> Optional[str]:
     """
     Exporta el AST a formato SVG usando graphviz.
     
@@ -99,8 +100,16 @@ def ast_to_svg(ast: FOLASTNode, filename: str = 'ast',
         # Construir el grafo
         add_node(ast)
         
-        # Renderizar
-        output_path = dot.render(filename=filename, directory=directory, cleanup=True)
+        # Renderizar formato principal
+        output_path = dot.render(filename=filename, directory=directory, cleanup=False, format=format)
+        
+        # Si se pidió PNG también, generar PNG adicional (no limpiar para mantenerlo)
+        if also_png and format != 'png':
+            try:
+                png_path = dot.render(filename=filename, directory=directory, cleanup=False, format='png')
+                print(f"Árbol AST exportado a PNG: {png_path}")
+            except Exception as png_error:
+                print(f"⚠ Advertencia: No se pudo generar PNG: {png_error}")
         
         print(f"Árbol AST exportado a: {output_path}")
         return output_path
@@ -200,12 +209,16 @@ def export_complete_analysis(ast: FOLASTNode,
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(result_data, f, ensure_ascii=False, indent=2)
     
-    # Exportar SVG (opcional)
-    svg_path = ast_to_svg(ast, filename=base_name, directory=output_dir, format='svg')
+    # Exportar SVG y PNG (opcional)
+    svg_path = ast_to_svg(ast, filename=base_name, directory=output_dir, format='svg', also_png=True)
     
     result = {'json': str(json_path)}
     if svg_path:
         result['svg'] = svg_path
+        # Buscar PNG correspondiente (graphviz lo genera automáticamente cuando also_png=True)
+        png_path = Path(output_dir) / f"{base_name}.png"
+        if png_path.exists():
+            result['png'] = str(png_path)
     
     return result
 
