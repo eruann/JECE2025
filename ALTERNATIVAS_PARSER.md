@@ -113,3 +113,4 @@ Usar Lark para casos simples y un parser manual/recursivo para construir condici
 
 Si no se puede arreglar en tiempo razonable, entonces migrar a pyparsing (Opción B).
 
+
