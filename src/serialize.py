@@ -10,8 +10,13 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 from graphviz import Digraph
-from fol_parser import FOLASTNode
-from metrics import calculate_all_metrics
+
+try:
+    from .fol_parser import FOLASTNode
+    from .metrics import calculate_all_metrics
+except ImportError:
+    from fol_parser import FOLASTNode
+    from metrics import calculate_all_metrics
 
 
 def ast_to_json(ast: FOLASTNode, metrics: Optional[Dict[str, Any]] = None, 
@@ -207,7 +212,10 @@ def export_complete_analysis(ast: FOLASTNode,
 
 if __name__ == '__main__':
     # Prueba básica
-    from fol_parser import FOLParser
+    try:
+        from .fol_parser import FOLParser
+    except ImportError:
+        from fol_parser import FOLParser
     
     parser = FOLParser()
     formula = "∀x (GenusBulbophyllum(x) → Orchid(x))"

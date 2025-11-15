@@ -4,13 +4,13 @@ Ejemplo de uso del paquete FOL Parser.
 Este archivo muestra cómo usar los módulos exportables del paquete.
 """
 
-# Opción 1: Importar desde el paquete (si está instalado)
-# from JECE2025 import (
-#     FOLParser, parse_global_conditional, calculate_all_metrics, 
-#     export_complete_analysis
-# )
+# Importar módulos desde src/ (archivos simples, no paquete instalable)
+# Simplemente agregamos src/ al path
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / 'src'))
 
-# Opción 2: Importar módulos directamente (actual)
 from fol_parser import FOLParser
 from build_conditionals import parse_global_conditional
 from metrics import calculate_all_metrics

@@ -13,6 +13,9 @@ ENV/
 build/
 dist/
 *.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Dataset cache
 .huggingface/
@@ -21,18 +24,32 @@ datasets/
 *.parquet
 
 # Output files
+outputs/
 *.svg
 *.png
 *.pdf
-outputs/
+results/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-project
+*.sublime-workspace
 
 # OS
 .DS_Store
 Thumbs.db
 
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~

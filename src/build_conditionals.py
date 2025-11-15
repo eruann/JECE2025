@@ -8,7 +8,12 @@ Sin modificar el texto original de las premisas y conclusión.
 """
 
 from typing import List, Union
-from fol_parser import FOLParser, FOLASTNode
+
+# Import relativo si es módulo, absoluto si se ejecuta directamente
+try:
+    from .fol_parser import FOLParser, FOLASTNode
+except ImportError:
+    from fol_parser import FOLParser, FOLASTNode
 
 
 def build_global_conditional(premises: List[str], conclusion: str) -> str:

@@ -5,6 +5,14 @@ Ejemplo 1: Sin XOR
 Ejemplo 2: Con XOR (⊕)
 """
 
+# Importar módulos desde src/ (archivos simples, no paquete instalable)
+import sys
+from pathlib import Path
+
+# Agregar src al path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / 'src'))
+
 from build_conditionals import build_global_conditional, parse_global_conditional
 from metrics import calculate_all_metrics
 from serialize import export_complete_analysis

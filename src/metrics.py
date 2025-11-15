@@ -10,7 +10,11 @@ Métricas implementadas:
 """
 
 from typing import Dict, List, Set, Tuple, Any
-from fol_parser import FOLASTNode
+
+try:
+    from .fol_parser import FOLASTNode
+except ImportError:
+    from fol_parser import FOLASTNode
 
 
 def calculate_total_depth(ast: FOLASTNode) -> int:
@@ -331,7 +335,10 @@ def calculate_all_metrics(ast: FOLASTNode) -> Dict[str, Any]:
 
 if __name__ == '__main__':
     # Prueba básica
-    from fol_parser import FOLParser
+    try:
+        from .fol_parser import FOLParser
+    except ImportError:
+        from fol_parser import FOLParser
     
     parser = FOLParser()
     formula = "∀x (GenusBulbophyllum(x) → Orchid(x))"

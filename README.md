@@ -2,6 +2,23 @@
 
 Sistema completo para procesar fórmulas de Lógica de Primer Orden (FOL) del dataset FOLIO, incluyendo parsing, cálculo de métricas y visualización.
 
+## Estructura del Proyecto
+
+```
+JECE2025/
+├── src/                  # Módulos principales (paquete Python)
+├── scripts/              # Scripts ejecutables
+│   ├── helpers/         # Scripts auxiliares
+│   └── metrics/         # Scripts de métricas
+├── pipeline/            # Pipelines de procesamiento
+├── tests/               # Tests unitarios
+├── memory-bank/         # Documentación y memorias
+├── datasets/            # Datasets descargados
+└── outputs/             # Resultados generados
+```
+
+Ver [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) para más detalles.
+
 ## Características
 
 - ✅ Parser FOL completo con soporte para:
@@ -31,16 +48,43 @@ sudo apt-get install graphviz
 conda install -c conda-forge graphviz
 ```
 
-## Uso Básico
+## Instalación
 
-### Importar módulos
+**NOTA:** Los módulos son archivos simples en `src/`, NO necesitas instalar nada como paquete.
+
+### Usar directamente desde src/
 
 ```python
-from fol_parser import FOLParser, FOLASTNode
+# En cualquier script, agrega estas líneas al inicio:
+import sys
+from pathlib import Path
+
+# Agregar src/ al path para importar módulos
+project_root = Path(__file__).parent.parent  # Ajusta según ubicación del script
+sys.path.insert(0, str(project_root / 'src'))
+
+# Ahora puedes importar directamente
+from fol_parser import FOLParser
 from build_conditionals import parse_global_conditional
 from metrics import calculate_all_metrics
 from serialize import export_complete_analysis
 ```
+
+**Ventajas:**
+- ✅ No necesitas instalar nada
+- ✅ Puedes modificar los archivos en `src/` directamente
+- ✅ Cambios se reflejan inmediatamente
+- ✅ Fácil de corregir y mejorar
+
+## Uso Básico
+
+### Verificar entorno
+
+```bash
+python scripts/helpers/check_environment.py
+```
+
+### Importar módulos
 
 ### Parsear una fórmula individual
 
@@ -85,18 +129,17 @@ files = export_complete_analysis(
 # Genera: outputs/analisis_001.json y outputs/analisis_001.svg
 ```
 
-## Estructura del Proyecto
+### Pipeline completo
 
-```
-JECE2025/
-├── fol_parser.py          # Parser FOL con Lark
-├── build_conditionals.py  # Construcción de condicionales globales
-├── metrics.py             # Cálculo de métricas
-├── serialize.py           # Exportación JSON/SVG
-├── download_folio.py      # Descarga del dataset
-├── test_examples.py       # Ejemplos de prueba
-├── example_usage.py       # Ejemplos de uso
-└── requirements.txt       # Dependencias
+```bash
+# Procesar todo el dataset
+python pipeline/process_folio.py
+
+# Procesar solo primeros 10 registros
+python pipeline/process_folio.py --max-records 10
+
+# Sin generar SVG (más rápido)
+python pipeline/process_folio.py --no-svg
 ```
 
 ## Módulos Exportables
