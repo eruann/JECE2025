@@ -71,6 +71,11 @@ def ast_to_svg(ast: FOLASTNode, filename: str = 'ast',
         dot = Digraph(comment='FOL AST', format=format)
         dot.attr(rankdir='TB')  # Top to bottom
         dot.attr('node', shape='box', style='rounded')
+        # Configurar fuente que soporte Unicode (especialmente símbolos matemáticos)
+        # Usar solo DejaVu Sans (mejor soporte Unicode en Linux)
+        dot.attr('node', fontname='DejaVu Sans')
+        dot.attr('graph', fontname='DejaVu Sans')
+        dot.attr('edge', fontname='DejaVu Sans')
         
         # Contador para IDs únicos
         node_counter = {'count': 0}
@@ -101,15 +106,26 @@ def ast_to_svg(ast: FOLASTNode, filename: str = 'ast',
         add_node(ast)
         
         # Renderizar formato principal
-        output_path = dot.render(filename=filename, directory=directory, cleanup=False, format=format)
+        output_path = dot.render(filename=filename, directory=directory, cleanup=True, format=format)
         
         # Si se pidió PNG también, generar PNG adicional (no limpiar para mantenerlo)
         if also_png and format != 'png':
             try:
-                png_path = dot.render(filename=filename, directory=directory, cleanup=False, format='png')
+                png_path = dot.render(filename=filename, directory=directory, cleanup=True, format='png')
                 print(f"Árbol AST exportado a PNG: {png_path}")
             except Exception as png_error:
                 print(f"⚠ Advertencia: No se pudo generar PNG: {png_error}")
+        
+        # Limpiar archivos temporales de graphviz (archivos sin extensión)
+        import os
+        dir_path = Path(directory)
+        if dir_path.exists():
+            for temp_file in dir_path.glob(filename):
+                if temp_file.is_file() and not temp_file.suffix:
+                    try:
+                        temp_file.unlink()
+                    except:
+                        pass
         
         print(f"Árbol AST exportado a: {output_path}")
         return output_path
@@ -126,20 +142,21 @@ def _create_node_label(ast_node: FOLASTNode) -> str:
         ast_node: Nodo del AST
     
     Returns:
-        String con la etiqueta
+        String con la etiqueta (usando HTML para mejor renderizado de Unicode)
     """
     node_type = ast_node.node_type
     
     # Para operadores binarios, mostrar el símbolo
+    # Usar entidades HTML para mejor compatibilidad con graphviz
     symbol_map = {
-        'AND': '∧',
-        'OR': '∨',
-        'XOR': '⊕',
-        'IMPLIES': '→',
-        'BICOND': '↔',
-        'NOT': '¬',
-        'FORALL': '∀',
-        'EXISTS': '∃'
+        'AND': '∧',  # U+2227
+        'OR': '∨',   # U+2228
+        'XOR': '⊕',  # U+2295
+        'IMPLIES': '→',  # U+2192
+        'BICOND': '↔',  # U+2194
+        'NOT': '¬',  # U+00AC
+        'FORALL': '∀',  # U+2200
+        'EXISTS': '∃'   # U+2203
     }
     
     if node_type in symbol_map:

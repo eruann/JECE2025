@@ -138,14 +138,18 @@ def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, c
             pil_img = PILImage.open(png_path)
             img_width, img_height = pil_img.size
             
-            max_width = 6 * inch
+            # Escalar manteniendo alta resolución para preservar símbolos Unicode
+            # El PNG generado por graphviz ya tiene los símbolos correctamente renderizados
+            max_width = 6.5 * inch  # Un poco más de espacio para mejor legibilidad
             if img_width > max_width:
                 scale = max_width / img_width
                 img_width = max_width
                 img_height = img_height * scale
             else:
-                img_width = img_width * 0.75
-                img_height = img_height * 0.75
+                # Si la imagen es pequeña, escalar menos para mantener calidad
+                # Mantener al menos 80% del tamaño original para preservar detalles
+                img_width = min(img_width * 0.85, max_width)
+                img_height = img_height * 0.85
             
             # Usar ruta absoluta y verificar que el archivo existe antes de crear Image
             png_abs = Path(png_path).absolute()
@@ -161,6 +165,7 @@ def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, c
             # Continuar sin imagen si falla
     
     # Si no se agregó PNG, intentar convertir SVG
+    # NOTA: Preferir usar PNG generado directamente por graphviz (mejor calidad Unicode)
     if not image_added and svg_path and Path(svg_path).exists():
         try:
             svg_abs_path = Path(svg_path).absolute()
@@ -169,7 +174,35 @@ def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, c
             with open(svg_abs_path, 'rb') as svg_file:
                 svg_data = svg_file.read()
             
-            cairosvg.svg2png(bytestring=svg_data, write_to=str(temp_png_path))
+            # Convertir SVG a PNG con alta resolución y preservación de Unicode
+            # Leer dimensiones del SVG para mantener proporciones
+            try:
+                import xml.etree.ElementTree as ET
+                tree = ET.fromstring(svg_data)
+                root = tree
+                # Buscar viewBox o width/height
+                viewbox = root.get('viewBox', '')
+                if viewbox:
+                    parts = viewbox.split()
+                    svg_width = int(float(parts[2])) if len(parts) > 2 else 1200
+                    svg_height = int(float(parts[3])) if len(parts) > 3 else 800
+                else:
+                    width_attr = root.get('width', '800')
+                    height_attr = root.get('height', '600')
+                    svg_width = int(float(width_attr.replace('pt', '').replace('px', '').replace('in', '')))
+                    svg_height = int(float(height_attr.replace('pt', '').replace('px', '').replace('in', '')))
+            except:
+                svg_width = 1200
+                svg_height = 800
+            
+            # Convertir con alta resolución (DPI alto) para preservar símbolos Unicode
+            cairosvg.svg2png(
+                bytestring=svg_data, 
+                write_to=str(temp_png_path),
+                output_width=svg_width * 2,  # Mayor resolución
+                output_height=svg_height * 2,
+                dpi=300  # Alta resolución para preservar detalles y símbolos
+            )
             
             if temp_png_path.exists() and temp_png_path.stat().st_size > 0:
                 from PIL import Image as PILImage
@@ -383,19 +416,31 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
             # Construir fórmula original
             formula = build_global_conditional(premises, conclusion)
             
+            # Crear directorio específico para este registro
+            record_output_dir = Path(output_dir) / 'random_test' / str(record_id)
+            record_output_dir.mkdir(parents=True, exist_ok=True)
+            
             # Exportar JSON y SVG
             print("Exportando JSON y SVG...")
             base_name = f"registro_{record_id}"
             files = export_complete_analysis(
                 ast,
                 original_formula=formula,
-                output_dir=output_dir,
+                output_dir=str(record_output_dir),
                 base_name=base_name
             )
             
             json_path = files.get('json')
             svg_path = files.get('svg')
             png_path = files.get('png')
+            
+            # Asegurar que las rutas sean absolutas o relativas al directorio del registro
+            if json_path:
+                json_path = str(record_output_dir / Path(json_path).name)
+            if svg_path:
+                svg_path = str(record_output_dir / Path(svg_path).name)
+            if png_path:
+                png_path = str(record_output_dir / Path(png_path).name)
             
             print(f"✓ JSON: {json_path}")
             if svg_path:
@@ -420,8 +465,8 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
             else:
                 premises_text = premises_text_raw
             
-            # Crear PDF
-            pdf_path = output_path / f"{record_id}.pdf"
+            # Crear PDF en el directorio del registro
+            pdf_path = record_output_dir / f"{record_id}.pdf"
             pdf_result = None
             try:
                 print("Generando PDF...")
