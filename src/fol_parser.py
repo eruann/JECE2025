@@ -119,27 +119,60 @@ class FOLTransformer(Transformer):
                     formula = self._ensure_fol_node(arg.children[1])
                     node_type = arg.data.upper()
                     return FOLASTNode(node_type, value=var_name, children=[formula])
-                elif arg.data in ('or', 'and', 'xor', 'implies', 'bicond') and len(arg.children) >= 2:
-                    left = self._ensure_fol_node(arg.children[0])
-                    right = self._ensure_fol_node(arg.children[1])
+                elif arg.data == 'and' and len(arg.children) >= 2:
+                    # Para Trees 'and', NO procesarlos aquí - dejar que and_ los maneje completamente
+                    # Retornar el Tree sin procesar para que and_ pueda procesar TODOS los hijos
+                    return arg
+                elif arg.data in ('or', 'xor', 'implies', 'bicond') and len(arg.children) >= 2:
+                    # Para otros operadores binarios, procesarlos normalmente
+                    # (pero and_ necesita manejar sus propios Trees)
                     node_type = arg.data.upper()
-                    if node_type == 'OR':
-                        return FOLASTNode("OR", children=[left, right])
-                    elif node_type == 'AND':
-                        return FOLASTNode("AND", children=[left, right])
-                    elif node_type == 'XOR':
-                        return FOLASTNode("XOR", children=[left, right])
-                    elif node_type == 'IMPLIES':
-                        return FOLASTNode("IMPLIES", children=[left, right])
-                    elif node_type == 'BICOND':
-                        return FOLASTNode("BICOND", children=[left, right])
+                    children_nodes = [self._ensure_fol_node(child) for child in arg.children]
+                    if len(children_nodes) == 1:
+                        return children_nodes[0]
+                    elif len(children_nodes) == 2:
+                        if node_type == 'OR':
+                            return FOLASTNode("OR", children=children_nodes)
+                        elif node_type == 'XOR':
+                            return FOLASTNode("XOR", children=children_nodes)
+                        elif node_type == 'IMPLIES':
+                            return FOLASTNode("IMPLIES", children=children_nodes)
+                        elif node_type == 'BICOND':
+                            return FOLASTNode("BICOND", children=children_nodes)
+                    else:
+                        # Más de 2 hijos: construir con asociatividad izquierda
+                        result = children_nodes[0]
+                        for i in range(1, len(children_nodes)):
+                            if node_type == 'OR':
+                                result = FOLASTNode("OR", children=[result, children_nodes[i]])
+                            elif node_type == 'XOR':
+                                result = FOLASTNode("XOR", children=[result, children_nodes[i]])
+                            elif node_type == 'IMPLIES':
+                                result = FOLASTNode("IMPLIES", children=[result, children_nodes[i]])
+                            elif node_type == 'BICOND':
+                                result = FOLASTNode("BICOND", children=[result, children_nodes[i]])
+                        return result
             
             # Para otros nodos, si tienen un solo hijo y NO es un operador lógico,
             # retornar ese hijo (evitar wrappings innecesarios de nodos intermedios de la gramática)
+            # PERO: si el nodo tiene un método específico en el transformer, usarlo
             if len(arg.children) == 1 and arg.data not in logical_operators:
-                return self._ensure_fol_node(arg.children[0])
+                # Verificar si hay un método específico para este tipo de Tree
+                method_name = arg.data
+                if hasattr(self, method_name):
+                    # Llamar al método del transformer
+                    return getattr(self, method_name)(arg.children)
+                else:
+                    # Si no hay método específico, procesar el hijo directamente
+                    return self._ensure_fol_node(arg.children[0])
             
-            # Para otros casos, transformar recursivamente los hijos
+            # Para otros casos, verificar si hay un método específico
+            method_name = arg.data
+            if hasattr(self, method_name):
+                # Llamar al método del transformer
+                return getattr(self, method_name)(arg.children)
+            
+            # Si no hay método específico, transformar recursivamente los hijos
             if arg.children:
                 transformed_children = [self._ensure_fol_node(child) for child in arg.children]
                 return FOLASTNode(arg.data.upper(), children=transformed_children)
@@ -211,9 +244,48 @@ class FOLTransformer(Transformer):
                 flat_args.extend(arg)
             else:
                 flat_args.append(arg)
-        args = [self._ensure_fol_node(arg) for arg in flat_args]
+        
+        # Procesar TODOS los argumentos directamente
+        # Si encontramos un Tree con data='and', expandir TODOS sus hijos
+        processed_args = []
+        
+        for arg in flat_args:
+            from lark import Tree
+            if isinstance(arg, Tree) and arg.data == 'and':
+                # Si es un Tree 'and', procesar TODOS sus hijos directamente
+                # IMPORTANTE: iterar sobre TODOS los hijos del Tree 'and'
+                initial_count = len(processed_args)
+                for i, child in enumerate(arg.children):
+                    # Procesar cada hijo normalmente
+                    child_node = self._ensure_fol_node(child)
+                    # Si el hijo procesado es también un Tree 'and', expandirlo recursivamente
+                    if isinstance(child_node, Tree) and child_node.data == 'and':
+                        # Expandir recursivamente el Tree 'and' anidado
+                        for grandchild in child_node.children:
+                            processed_args.append(self._ensure_fol_node(grandchild))
+                    else:
+                        # Agregar el nodo procesado directamente
+                        processed_args.append(child_node)
+                # Verificar que se procesaron todos los hijos
+                added_count = len(processed_args) - initial_count
+                if added_count != len(arg.children):
+                    # Si no se agregaron todos los hijos, hay un problema
+                    # Esto no debería pasar, pero si pasa, al menos sabemos dónde está el problema
+                    pass
+            else:
+                # Para otros argumentos, procesarlos normalmente
+                node = self._ensure_fol_node(arg)
+                # Si retornó un Tree 'and', expandirlo también
+                if isinstance(node, Tree) and node.data == 'and':
+                    for child in node.children:
+                        processed_args.append(self._ensure_fol_node(child))
+                else:
+                    processed_args.append(node)
+        
+        args = processed_args
         if len(args) == 1:
             return args[0]  # Si solo hay un elemento, retornarlo directamente
+        # Construir AND con asociatividad izquierda: ((A ∧ B) ∧ C) ∧ D ...
         result = args[0]
         for i in range(1, len(args)):
             result = FOLASTNode("AND", children=[result, args[i]])
@@ -243,14 +315,70 @@ class FOLTransformer(Transformer):
         # args[0] es la variable, args[1] es la fórmula
         var_node = self._ensure_fol_node(args[0])
         var_name = var_node.value if isinstance(var_node, FOLASTNode) and var_node.value else str(var_node)
-        formula = self._ensure_fol_node(args[1])
+        formula_raw = args[1]
+        # La fórmula puede estar anidada en varios niveles (bicond -> implies -> or -> and)
+        # Necesitamos encontrar el Tree 'and' más profundo y procesarlo
+        from lark import Tree
+        
+        def find_and_tree(node):
+            """Encuentra el Tree 'and' más profundo."""
+            if isinstance(node, Tree):
+                if node.data == 'and':
+                    return node
+                # Buscar recursivamente en los hijos
+                for child in node.children:
+                    result = find_and_tree(child)
+                    if result:
+                        return result
+            return None
+        
+        # Buscar el Tree 'and' en la fórmula
+        and_tree = find_and_tree(formula_raw)
+        if and_tree:
+            # Si encontramos un Tree 'and', procesarlo directamente con and_
+            # IMPORTANTE: pasar el Tree 'and' completo como lista, and_ lo expandirá
+            formula = self.and_([and_tree])
+        else:
+            # Si no hay Tree 'and', procesar normalmente
+            formula = self._ensure_fol_node(formula_raw)
+            # Si _ensure_fol_node retornó un Tree 'and', procesarlo con and_
+            if isinstance(formula, Tree) and formula.data == 'and':
+                formula = self.and_([formula])
         return FOLASTNode("FORALL", value=var_name, children=[formula])
     
     def exists(self, args):
         # args[0] es la variable, args[1] es la fórmula
         var_node = self._ensure_fol_node(args[0])
         var_name = var_node.value if isinstance(var_node, FOLASTNode) and var_node.value else str(var_node)
-        formula = self._ensure_fol_node(args[1])
+        formula_raw = args[1]
+        # La fórmula puede estar anidada en varios niveles (bicond -> implies -> or -> and)
+        # Necesitamos encontrar el Tree 'and' más profundo y procesarlo
+        from lark import Tree
+        
+        def find_and_tree(node):
+            """Encuentra el Tree 'and' más profundo."""
+            if isinstance(node, Tree):
+                if node.data == 'and':
+                    return node
+                # Buscar recursivamente en los hijos
+                for child in node.children:
+                    result = find_and_tree(child)
+                    if result:
+                        return result
+            return None
+        
+        # Buscar el Tree 'and' en la fórmula
+        and_tree = find_and_tree(formula_raw)
+        if and_tree:
+            # Si encontramos un Tree 'and', procesarlo directamente con and_
+            # IMPORTANTE: pasar el Tree 'and' completo como lista, and_ lo expandirá
+            formula = self.and_([and_tree])
+        else:
+            # Si no hay Tree 'and', procesar normalmente
+            formula = self._ensure_fol_node(formula_raw)
+            # Si _ensure_fol_node retornó un Tree 'and', procesarlo con and_
+            if isinstance(formula, Tree) and formula.data == 'and':
+                formula = self.and_([formula])
         return FOLASTNode("EXISTS", value=var_name, children=[formula])
     
     def predicate(self, args):
