@@ -9,7 +9,7 @@ Métricas implementadas:
 - Conteos: #subfórmulas, #cuantificadores, distribución de conectivas (incl. ⊕)
 """
 
-from typing import Dict, List, Set, Tuple, Any
+from typing import Dict, List, Set, Tuple, Any, Optional
 
 try:
     from .fol_parser import FOLASTNode
@@ -173,7 +173,7 @@ def calculate_variable_binding(ast: FOLASTNode,
         # Recursivamente buscar ocurrencias de esta variable en el scope
         if ast.children:
             scope_formula = ast.children[0]
-            _find_bound_occurrences(scope_formula, var_name, ast, bindings, new_bound_vars)
+            _find_bound_occurrences(scope_formula, var_name, ast, bindings, new_bound_vars, set())
     
     # Recursivamente procesar hijos
     for child in ast.children:
@@ -186,25 +186,47 @@ def _find_bound_occurrences(node: FOLASTNode,
                            var_name: str, 
                            quantifier: FOLASTNode,
                            bindings: Dict[FOLASTNode, List[FOLASTNode]],
-                           bound_vars: Dict[str, FOLASTNode]):
-    """Función auxiliar para encontrar ocurrencias ligadas de una variable."""
+                           bound_vars: Dict[str, FOLASTNode],
+                           seen_nodes: Set[int] = None):
+    """
+    Función auxiliar para encontrar ocurrencias ligadas de una variable.
     
-    # Si es un término o átomo con el nombre de la variable
-    if node.node_type in {'TERM', 'ATOM', 'VARIABLE'}:
-        if node.value == var_name:
-            # Esta es una ocurrencia ligada
-            if quantifier not in bindings:
-                bindings[quantifier] = []
-            bindings[quantifier].append(node)
+    Args:
+        seen_nodes: Conjunto de IDs de nodos ya procesados para evitar duplicados
+    """
+    if seen_nodes is None:
+        seen_nodes = set()
     
-    # Si es un predicado, revisar sus argumentos (términos)
+    # Si es un predicado, revisar sus argumentos (términos) primero
+    # Esto evita procesar el mismo TERM dos veces (directamente y dentro del predicado)
     if node.node_type == 'PREDICATE':
         for child in node.children:
             if isinstance(child, FOLASTNode) and child.node_type == 'TERM':
                 if child.value == var_name:
-                    if quantifier not in bindings:
-                        bindings[quantifier] = []
-                    bindings[quantifier].append(child)
+                    node_id = id(child)
+                    if node_id not in seen_nodes:
+                        seen_nodes.add(node_id)
+                        if quantifier not in bindings:
+                            bindings[quantifier] = []
+                        bindings[quantifier].append(child)
+        # Continuar recursivamente con los hijos (aunque ya procesamos TERMs)
+        for child in node.children:
+            if isinstance(child, FOLASTNode):
+                # No procesar TERMs aquí porque ya los procesamos arriba
+                if child.node_type != 'TERM':
+                    _find_bound_occurrences(child, var_name, quantifier, bindings, bound_vars, seen_nodes)
+        return
+    
+    # Si es un término o átomo con el nombre de la variable (y NO es hijo de un PREDICATE)
+    # Nota: Los TERMs hijos de PREDICATE ya se procesaron arriba
+    if node.node_type in {'TERM', 'ATOM', 'VARIABLE'}:
+        if node.value == var_name:
+            node_id = id(node)
+            if node_id not in seen_nodes:
+                seen_nodes.add(node_id)
+                if quantifier not in bindings:
+                    bindings[quantifier] = []
+                bindings[quantifier].append(node)
     
     # Recursivamente buscar en hijos
     for child in node.children:
@@ -215,7 +237,7 @@ def _find_bound_occurrences(node: FOLASTNode,
                 # Si este cuantificador liga la misma variable, no buscar más profundo
                 if child.value == var_name:
                     continue
-            _find_bound_occurrences(child, var_name, quantifier, bindings, bound_vars)
+            _find_bound_occurrences(child, var_name, quantifier, bindings, bound_vars, seen_nodes)
 
 
 def count_subformulas(ast: FOLASTNode) -> int:
