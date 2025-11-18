@@ -70,14 +70,43 @@ class FOLASTNode:
             return f"{self.node_type}({', '.join(map(str, self.children))})"
         return self.node_type
     
-    def to_dict(self):
-        """Convierte el nodo a diccionario para serialización."""
-        result = {"type": self.node_type}
+    def to_dict(self, node_id_map: Dict = None, counter: Dict = None):
+        """
+        Convierte el nodo a diccionario para serialización.
+        
+        Args:
+            node_id_map: Diccionario para mapear objetos a IDs (se crea si es None)
+            counter: Contador para generar IDs únicos (se crea si es None)
+        
+        Returns:
+            Diccionario con el nodo serializado, incluyendo un ID único
+        """
+        if node_id_map is None:
+            node_id_map = {}
+        if counter is None:
+            counter = {'count': 0}
+        
+        # Generar ID único para este nodo si no existe
+        if id(self) not in node_id_map:
+            node_id = f"node_{counter['count']}"
+            counter['count'] += 1
+            node_id_map[id(self)] = node_id
+        else:
+            node_id = node_id_map[id(self)]
+        
+        result = {
+            "id": node_id,
+            "type": self.node_type
+        }
+        
         if self.value is not None:
             result["value"] = self.value
         if self.children:
-            result["children"] = [child.to_dict() if isinstance(child, FOLASTNode) else child 
-                                 for child in self.children]
+            result["children"] = [
+                child.to_dict(node_id_map, counter) if isinstance(child, FOLASTNode) else child 
+                for child in self.children
+            ]
+        
         return result
 
 

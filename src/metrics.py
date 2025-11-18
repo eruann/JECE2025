@@ -299,31 +299,59 @@ def count_connectives(ast: FOLASTNode) -> Dict[str, int]:
     return distribution
 
 
-def calculate_all_metrics(ast: FOLASTNode) -> Dict[str, Any]:
+def calculate_all_metrics(ast: FOLASTNode, node_id_map: Dict = None) -> Dict[str, Any]:
     """
     Calcula todas las métricas y las retorna en un diccionario.
     
     Args:
         ast: Nodo raíz del AST
+        node_id_map: Diccionario opcional que mapea id(nodo) -> ID serializable.
+                     Si es None, se genera automáticamente usando to_dict().
     
     Returns:
-        Diccionario con todas las métricas calculadas
+        Diccionario con todas las métricas calculadas, usando IDs serializables
     """
+    # Si no se proporciona node_id_map, generarlo desde el AST
+    if node_id_map is None:
+        node_id_map = {}
+        counter = {'count': 0}
+        
+        def build_id_map(node: FOLASTNode):
+            """Construye el mapa de IDs recursivamente."""
+            if id(node) not in node_id_map:
+                node_id = f"node_{counter['count']}"
+                counter['count'] += 1
+                node_id_map[id(node)] = node_id
+            
+            for child in node.children:
+                if isinstance(child, FOLASTNode):
+                    build_id_map(child)
+        
+        build_id_map(ast)
+    
+    # Calcular métricas usando los IDs serializables
+    quantifier_scopes = calculate_quantifier_scope(ast)
+    connective_scopes = calculate_connective_scope(ast)
+    variable_bindings = calculate_variable_binding(ast)
+    
+    # Convertir a formato serializable usando los IDs
     metrics = {
         'total_depth': calculate_total_depth(ast),
         'operator_depth': calculate_operator_depth(ast),
         'quantifier_scope': {
-            # Convertir nodos a IDs para serialización
-            id(q): [id(n) for n in scope] 
-            for q, scope in calculate_quantifier_scope(ast).items()
+            node_id_map[id(q)]: [node_id_map[id(n)] for n in scope]
+            for q, scope in quantifier_scopes.items()
+            if id(q) in node_id_map
         },
         'connective_scope': {
-            id(c): [id(n) for n in scope]
-            for c, scope in calculate_connective_scope(ast).items()
+            node_id_map[id(c)]: [node_id_map[id(n)] for n in scope]
+            for c, scope in connective_scopes.items()
+            if id(c) in node_id_map
         },
         'variable_binding': {
-            id(q): [id(n) for n in occurrences]
-            for q, occurrences in calculate_variable_binding(ast).items()
+            node_id_map[id(q)]: [node_id_map[id(n)] for n in occurrences]
+            for q, occurrences in variable_bindings.items()
+            if id(q) in node_id_map
         },
         'num_subformulas': count_subformulas(ast),
         'num_quantifiers': count_quantifiers(ast),

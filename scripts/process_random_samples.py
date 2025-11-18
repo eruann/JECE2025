@@ -24,7 +24,7 @@ from metrics import calculate_all_metrics
 from serialize import export_complete_analysis
 
 
-def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, conclusion_fol, svg_path, json_path, output_path, png_path=None):
+def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, conclusion_fol, svg_path, json_path, output_path, png_path=None, png_scope_path=None):
     """
     Crea un PDF con toda la información del registro.
     
@@ -124,7 +124,7 @@ def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, c
     story.append(Paragraph(str(conclusion_fol), body_style))
     story.append(Spacer(1, 0.2*inch))
     
-    # SVG/PNG (imagen del árbol)
+    # SVG/PNG (imagen del árbol básico)
     story.append(Paragraph("<b>Árbol Sintáctico (AST):</b>", heading_style))
     
     # Intentar incluir imagen (PNG preferido, luego SVG convertido)
@@ -233,6 +233,42 @@ def create_pdf_report(record_id, premises_text, conclusion_text, premises_fol, c
         else:
             story.append(Paragraph("<i>Imagen del árbol no disponible</i>", body_style))
         story.append(Spacer(1, 0.1*inch))
+    
+    # Árbol con alcance y ligadura (si está disponible)
+    if png_scope_path and Path(png_scope_path).exists() and Path(png_scope_path).stat().st_size > 0:
+        story.append(PageBreak())
+        story.append(Paragraph("<b>Árbol Sintáctico con Alcance y Ligadura:</b>", heading_style))
+        story.append(Paragraph(
+            "<i>Los nodos coloreados muestran el alcance de cada cuantificador. "
+            "Las líneas punteadas conectan cuantificadores con las variables que ligan.</i>", 
+            body_style
+        ))
+        story.append(Spacer(1, 0.1*inch))
+        
+        try:
+            from PIL import Image as PILImage
+            pil_img = PILImage.open(png_scope_path)
+            img_width, img_height = pil_img.size
+            
+            # Escalar manteniendo alta resolución
+            max_width = 6.5 * inch
+            if img_width > max_width:
+                scale = max_width / img_width
+                img_width = max_width
+                img_height = img_height * scale
+            else:
+                img_width = min(img_width * 0.85, max_width)
+                img_height = img_height * 0.85
+            
+            png_scope_abs = Path(png_scope_path).absolute()
+            if png_scope_abs.exists():
+                img = Image(str(png_scope_abs), width=img_width, height=img_height)
+                story.append(img)
+                story.append(Spacer(1, 0.2*inch))
+        except Exception as e:
+            print(f"⚠ Error al agregar PNG con alcance/ligadura al PDF: {e}")
+            story.append(Paragraph("<i>Imagen con alcance y ligadura no disponible</i>", body_style))
+            story.append(Spacer(1, 0.1*inch))
     
     # JSON
     story.append(Paragraph("<b>Métricas y AST (JSON):</b>", heading_style))
@@ -433,6 +469,7 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
             json_path = files.get('json')
             svg_path = files.get('svg')
             png_path = files.get('png')
+            png_scope_path = files.get('png_scope')
             
             # Asegurar que las rutas sean absolutas o relativas al directorio del registro
             if json_path:
@@ -441,6 +478,8 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
                 svg_path = str(record_output_dir / Path(svg_path).name)
             if png_path:
                 png_path = str(record_output_dir / Path(png_path).name)
+            if png_scope_path:
+                png_scope_path = str(record_output_dir / Path(png_scope_path).name)
             
             print(f"✓ JSON: {json_path}")
             if svg_path:
@@ -449,6 +488,8 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
                 print(f"✓ PNG: {png_path}")
             else:
                 print(f"⚠ PNG no disponible en files: {list(files.keys())}")
+            if png_scope_path:
+                print(f"✓ PNG con alcance/ligadura: {png_scope_path}")
             
             # Obtener textos originales (no FOL) del registro
             premises_text_raw = record.get('premises', '')
@@ -478,7 +519,9 @@ def process_random_samples(num_samples=3, output_dir='outputs', fixed_example_id
                     conclusion_fol=conclusion,
                     svg_path=svg_path,
                     json_path=json_path,
-                    output_path=pdf_path
+                    output_path=pdf_path,
+                    png_path=png_path,
+                    png_scope_path=png_scope_path
                 )
                 
                 if pdf_result:

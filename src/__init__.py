@@ -40,7 +40,10 @@ from metrics import (
 from serialize import (
     ast_to_json,
     ast_to_svg,
-    export_complete_analysis
+    ast_to_svg_with_scope_binding,
+    export_complete_analysis,
+    find_node_by_id,
+    get_scope_and_binding_info
 )
 from download_folio import download_folio_dataset
 
@@ -72,7 +75,10 @@ __all__ = [
     # Serialización
     'ast_to_json',
     'ast_to_svg',
+    'ast_to_svg_with_scope_binding',
     'export_complete_analysis',
+    'find_node_by_id',
+    'get_scope_and_binding_info',
     
     # Descarga de datos
     'download_folio_dataset',
