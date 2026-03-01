@@ -438,15 +438,27 @@ def ast_to_svg_with_scope_binding(ast: FOLASTNode, filename: str = 'ast_scope',
                 if innermost_qid in nodes_by_cluster:
                     nodes_by_cluster[innermost_qid].append(gv_id)
         
-        # Pase 2: construir grafo con clusters anidados
-        def add_nodes_to_graph(graph, quantifier_idx: int):
-            """Añade nodos y clusters recursivamente (outer a inner)."""
-            if quantifier_idx >= len(quantifiers_ordered):
-                return
-            
-            quantifier = quantifiers_ordered[quantifier_idx]
+        # Parent de cada cuantificador: el que lo contiene (solo si está anidado)
+        # Cuantificadores hermanos tienen parent None
+        quantifier_parent = {}
+        for q in quantifiers_ordered:
+            q_obj_id = id(q)
+            if q_obj_id in scope_nodes and scope_nodes[q_obj_id]:
+                parent_qid = scope_nodes[q_obj_id][-1]
+                quantifier_parent[q] = next(
+                    (p for p in quantifiers_ordered if id(p) == parent_qid), None
+                )
+            else:
+                quantifier_parent[q] = None
+        
+        # Pase 2: clusters. Solo anidar cuando hay relación padre-hijo real.
+        cluster_counter = {'n': 0}
+        
+        def add_cluster(graph, quantifier):
+            """Añade cluster para este cuantificador y recursivamente para sus hijos."""
             q_id = id(quantifier)
-            cluster_name = f"cluster_{quantifier_idx}"
+            cluster_counter['n'] += 1
+            cluster_name = f"cluster_{cluster_counter['n']}"
             var_name = quantifier.value if quantifier.value else "x"
             base_color = quantifier_color_map[q_id]
             hex_color = base_color.lstrip('#')
@@ -459,7 +471,9 @@ def ast_to_svg_with_scope_binding(ast: FOLASTNode, filename: str = 'ast_scope',
                 for nid in nodes_by_cluster[q_id]:
                     label, attrs = node_data[nid]
                     sub.node(nid, label, **attrs)
-                add_nodes_to_graph(sub, quantifier_idx + 1)
+                for q2 in quantifiers_ordered:
+                    if quantifier_parent.get(q2) is quantifier:
+                        add_cluster(sub, q2)
         
         # Nodos fuera de cualquier alcance van al grafo principal
         nodes_in_clusters = set()
@@ -470,9 +484,11 @@ def ast_to_svg_with_scope_binding(ast: FOLASTNode, filename: str = 'ast_scope',
             if nid not in nodes_in_clusters:
                 dot.node(nid, label, **attrs)
         
-        # Clusters anidados (solo si hay cuantificadores)
+        # Clusters: cada cuantificador raíz (parent None) tiene su propio cluster al mismo nivel
         if quantifiers_ordered:
-            add_nodes_to_graph(dot, 0)
+            for q in quantifiers_ordered:
+                if quantifier_parent.get(q) is None:
+                    add_cluster(dot, q)
         
         for parent_id, child_id in edges_list:
             dot.edge(parent_id, child_id)
