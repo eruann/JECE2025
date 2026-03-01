@@ -384,74 +384,98 @@ def ast_to_svg_with_scope_binding(ast: FOLASTNode, filename: str = 'ast_scope',
         for quantifier, scope_list in quantifier_scopes.items():
             quantifier_id = id(quantifier)
             for scope_node in scope_list:
-                # Marcar recursivamente todos los nodos en el alcance (pero no el cuantificador mismo)
                 mark_scope_nodes(scope_node, quantifier_id)
         
-        def add_node(ast_node: FOLASTNode, parent_id: Optional[str] = None):
-            """Agrega un nodo y recursivamente sus hijos."""
-            # Generar ID único para este nodo
+        # Pase 1: recolectar nodos, edges y asignar clusters
+        quantifiers_ordered = list(quantifier_scopes.keys())
+        nodes_by_cluster = {id(q): [] for q in quantifiers_ordered}
+        node_data = {}  # node_id -> (label, attrs)
+        edges_list = []  # [(parent_id, child_id), ...]
+        
+        def collect_node(ast_node: FOLASTNode, parent_id: Optional[str] = None):
             node_id = f"node_{node_counter['count']}"
             node_counter['count'] += 1
             node_id_map[id(ast_node)] = node_id
             
-            # Crear etiqueta para el nodo
             label = _create_node_label(ast_node)
-            
-            # Determinar color de fondo según alcance
             node_id_obj = id(ast_node)
             node_attrs = {}
             
-            # Si este nodo está en el alcance de algún cuantificador, colorearlo
             if node_id_obj in scope_nodes:
                 quantifier_ids = scope_nodes[node_id_obj]
                 if quantifier_ids:
-                    # Usar el color del primer cuantificador (si hay múltiples, usar el más externo)
-                    # En caso de múltiples alcances anidados, usar gradiente o color mixto
-                    if len(quantifier_ids) == 1:
-                        color = quantifier_color_map[quantifier_ids[0]]
-                        node_attrs['fillcolor'] = color
-                        node_attrs['style'] = 'rounded,filled'
-                    else:
-                        # Múltiples alcances: usar color del más externo o color mixto
-                        color = quantifier_color_map[quantifier_ids[-1]]  # Último = más externo
-                        node_attrs['fillcolor'] = color
-                        node_attrs['style'] = 'rounded,filled'
+                    color = quantifier_color_map[quantifier_ids[-1]]
+                    node_attrs['fillcolor'] = color
+                    node_attrs['style'] = 'rounded,filled'
             
-            # Si es un cuantificador, marcar con borde más grueso y color más oscuro
-            # (pero NO colorear el fondo con el color del alcance - el cuantificador no está en su propio alcance)
             if ast_node.node_type in {'FORALL', 'EXISTS'}:
                 quantifier_id = id(ast_node)
                 if quantifier_id in quantifier_color_map:
-                    # Crear versión más oscura del color para el borde
                     base_color = quantifier_color_map[quantifier_id]
-                    # Convertir hex a RGB, oscurecer, volver a hex
                     hex_color = base_color.lstrip('#')
                     rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-                    darker_rgb = tuple(max(0, c - 60) for c in rgb)  # Oscurecer cada componente
+                    darker_rgb = tuple(max(0, c - 60) for c in rgb)
                     darker_hex = '#{:02x}{:02x}{:02x}'.format(*darker_rgb)
-                    
                     node_attrs['color'] = darker_hex
                     node_attrs['penwidth'] = '2.5'
-                    # El cuantificador tiene fondo blanco o muy claro, no el color de su alcance
                     if 'style' not in node_attrs:
                         node_attrs['style'] = 'rounded,filled'
-                    # Sobrescribir cualquier color de fondo que pueda haber sido asignado por el alcance
-                    node_attrs['fillcolor'] = '#FFFFFF'  # Fondo blanco para el cuantificador
-                    node_attrs['color'] = darker_hex  # Borde oscuro del color del alcance
+                    node_attrs['fillcolor'] = '#FFFFFF'
             
-            # Agregar nodo al grafo con atributos
-            dot.node(node_id, label, **node_attrs)
-            
-            # Conectar con el padre si existe (arco normal del árbol)
+            node_data[node_id] = (label, node_attrs)
             if parent_id:
-                dot.edge(parent_id, node_id)
+                edges_list.append((parent_id, node_id))
             
-            # Recursivamente agregar hijos
             for child in ast_node.children:
-                add_node(child, node_id)
+                collect_node(child, node_id)
         
-        # Construir el grafo
-        add_node(ast)
+        collect_node(ast)
+        
+        # Asignar cada nodo a su cluster (alcance más interno)
+        for node_obj_id, gv_id in node_id_map.items():
+            if node_obj_id in scope_nodes and scope_nodes[node_obj_id]:
+                innermost_qid = scope_nodes[node_obj_id][-1]
+                if innermost_qid in nodes_by_cluster:
+                    nodes_by_cluster[innermost_qid].append(gv_id)
+        
+        # Pase 2: construir grafo con clusters anidados
+        def add_nodes_to_graph(graph, quantifier_idx: int):
+            """Añade nodos y clusters recursivamente (outer a inner)."""
+            if quantifier_idx >= len(quantifiers_ordered):
+                return
+            
+            quantifier = quantifiers_ordered[quantifier_idx]
+            q_id = id(quantifier)
+            cluster_name = f"cluster_{quantifier_idx}"
+            var_name = quantifier.value if quantifier.value else "x"
+            base_color = quantifier_color_map[q_id]
+            hex_color = base_color.lstrip('#')
+            rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+            border_rgb = tuple(max(0, c - 60) for c in rgb)
+            border_hex = '#{:02x}{:02x}{:02x}'.format(*border_rgb)
+            
+            with graph.subgraph(name=cluster_name) as sub:
+                sub.attr(label=f'∀{var_name}', color=border_hex, penwidth='2', style='rounded')
+                for nid in nodes_by_cluster[q_id]:
+                    label, attrs = node_data[nid]
+                    sub.node(nid, label, **attrs)
+                add_nodes_to_graph(sub, quantifier_idx + 1)
+        
+        # Nodos fuera de cualquier alcance van al grafo principal
+        nodes_in_clusters = set()
+        for nids in nodes_by_cluster.values():
+            nodes_in_clusters.update(nids)
+        
+        for nid, (label, attrs) in node_data.items():
+            if nid not in nodes_in_clusters:
+                dot.node(nid, label, **attrs)
+        
+        # Clusters anidados (solo si hay cuantificadores)
+        if quantifiers_ordered:
+            add_nodes_to_graph(dot, 0)
+        
+        for parent_id, child_id in edges_list:
+            dot.edge(parent_id, child_id)
         
         # Agregar arcos de ligadura (conectar cuantificadores con variables ligadas)
         for quantifier, bound_occurrences in variable_bindings.items():

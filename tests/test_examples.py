@@ -3,6 +3,7 @@ Script de prueba con los ejemplos proporcionados para validar el pipeline comple
 
 Ejemplo 1: Sin XOR
 Ejemplo 2: Con XOR (⊕)
+Ejemplo 3: Cuantificación múltiple (∀x ∀y)
 """
 
 # Importar módulos desde src/ (archivos simples, no paquete instalable)
@@ -162,6 +163,71 @@ def test_example_2():
         traceback.print_exc()
 
 
+def test_example_3():
+    """Prueba el Ejemplo 3: Cuantificación múltiple ∀x ∀y."""
+    print("\n" + "=" * 80)
+    print("EJEMPLO 3: Cuantificación múltiple (∀x ∀y)")
+    print("=" * 80)
+    
+    premises = [
+        "∀x (∀y (P(x, y) → Q(x, y)))",
+        "P(a, b)"
+    ]
+    conclusion = "Q(a, b)"
+    
+    print("\nPremisas:")
+    for i, prem in enumerate(premises, 1):
+        print(f"  {i}. {prem}")
+    print(f"\nConclusión: {conclusion}")
+    
+    conditional = build_global_conditional(premises, conclusion)
+    print(f"\nCondicional global:")
+    print(f"  {conditional}")
+    
+    print("\nParseando fórmula...")
+    try:
+        ast = parse_global_conditional(premises, conclusion)
+        print("✓ Parseo exitoso")
+        print(f"\nAST (representación): {ast}")
+    except Exception as e:
+        print(f"✗ Error al parsear: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    print("\nCalculando métricas...")
+    metrics = calculate_all_metrics(ast)
+    
+    print("\nMétricas calculadas:")
+    print(f"  Profundidad total: {metrics['total_depth']}")
+    print(f"  Profundidad de operador: {metrics['operator_depth']}")
+    print(f"  Número de subfórmulas: {metrics['num_subformulas']}")
+    print(f"  Número de cuantificadores: {metrics['num_quantifiers']}")
+    print(f"  Distribución de conectivas:")
+    for conn_type, count in metrics['connective_distribution'].items():
+        if count > 0:
+            print(f"    {conn_type}: {count}")
+    
+    if metrics['num_quantifiers'] >= 2:
+        print("\n✓ Cuantificación múltiple (∀x ∀y) detectada correctamente")
+    
+    print("\nExportando análisis completo...")
+    try:
+        files = export_complete_analysis(
+            ast,
+            original_formula=conditional,
+            output_dir='outputs',
+            base_name='ejemplo_3'
+        )
+        print(f"✓ JSON exportado: {files['json']}")
+        if 'svg' in files:
+            print(f"✓ SVG exportado: {files['svg']}")
+    except Exception as e:
+        print(f"✗ Error al exportar: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def test_individual_formulas():
     """Prueba fórmulas individuales para verificar el parser."""
     print("\n" + "=" * 80)
@@ -174,6 +240,8 @@ def test_individual_formulas():
         "GenusBulbophyllum(bulbophyllumAttenuatum)",
         "¬Orchid(bulbophyllumAttenuatum)",
         "∀x (GenusBulbophyllum(x) → Orchid(x))",
+        "∀x (∀y (P(x, y) → Q(x, y)))",
+        "∀x (∀y (∀z (P(x, y, z) → Q(x, y, z))))",
         "Student(rina) ⊕ ¬AwareThatDrug(rina, caffeine)",
         "¬(Student(rina) ⊕ ¬AwareThatDrug(rina, caffeine))",
     ]
@@ -198,6 +266,7 @@ if __name__ == '__main__':
     # Ejecutar pruebas
     test_example_1()
     test_example_2()
+    test_example_3()
     test_individual_formulas()
     
     print("\n" + "=" * 80)
